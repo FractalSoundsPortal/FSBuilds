@@ -1,0 +1,37 @@
+{
+  "manifestVersion": "1.0",
+  "lastUpdated": "2025-10-26T00:00:00Z",
+
+  "products": {
+    "Lumen": {
+      "name": "Lumen Harmonic Sculptor",
+      "version": "V0.5.0",
+      "status": "beta",
+      "platforms": {
+        "Win64": {
+          "plugin": "https://raw.githubusercontent.com/FractalSoundsPortal/FSBuilds/main/Lumen/VST/VST3_Lumen_V.0.5.0.zip",
+          "presets": "https://raw.githubusercontent.com/FractalSoundsPortal/FSBuilds/main/Lumen/Presets/Presets_Lumen_V.0.5.0.zip"
+        },
+        "MacOS": {
+          "plugin": "https://raw.githubusercontent.com/FractalSoundsPortal/FSBuilds/main/Lumen/VST/VST3_Lumen_V.0.5.0.zip",
+          "presets": "https://raw.githubusercontent.com/FractalSoundsPortal/FSBuilds/main/Lumen/Presets/Presets_Lumen_V.0.5.0.zip"
+        }
+      },
+      "notes": "Initial beta release for Fractal Portal testing"
+    },
+
+    "Glow": {
+      "name": "Glow Harmonic Enhancer",
+      "version": "V0.0.0",
+      "status": "planned",
+      "platforms": {}
+    },
+
+    "Morphogen": {
+      "name": "Morphogen Synthesizer",
+      "version": "V0.0.0",
+      "status": "planned",
+      "platforms": {}
+    }
+  }
+}
