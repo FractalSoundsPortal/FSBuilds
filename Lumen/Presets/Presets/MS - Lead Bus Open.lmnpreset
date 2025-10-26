@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<PARAMETERS>
+  <PARAM id="lumenAirBandFreq" value="8000.00048828125"/>
+  <PARAM id="lumenAirBandGain" value="0.0"/>
+  <PARAM id="lumenBottomCircuitryType" value="0.0"/>
+  <PARAM id="lumenBottomDryWet" value="0.5160000324249268"/>
+  <PARAM id="lumenBottomOutputLevel" value="1.0"/>
+  <PARAM id="lumenBottomSatAmount" value="0.7360000610351562"/>
+  <PARAM id="lumenBottomSatType" value="3.0"/>
+  <PARAM id="lumenBottomShapeAmount" value="0.64000004529953"/>
+  <PARAM id="lumenBottomShapeType" value="2.0"/>
+  <PARAM id="lumenBottomWarpAmount" value="0.292000025510788"/>
+  <PARAM id="lumenBottomWarpType" value="8.0"/>
+  <PARAM id="lumenCrossover" value="0.3840000033378601"/>
+  <PARAM id="lumenExciterAmount" value="0.0"/>
+  <PARAM id="lumenExciterType" value="2.0"/>
+  <PARAM id="lumenLinkBands" value="0.0"/>
+  <PARAM id="lumenSplitMode" value="2.0"/>
+  <PARAM id="lumenTopCircuitryType" value="0.0"/>
+  <PARAM id="lumenTopDryWet" value="0.4580000340938568"/>
+  <PARAM id="lumenTopOutputLevel" value="1.0"/>
+  <PARAM id="lumenTopSatAmount" value="0.6760000586509705"/>
+  <PARAM id="lumenTopSatType" value="3.0"/>
+  <PARAM id="lumenTopShapeAmount" value="0.3120000064373016"/>
+  <PARAM id="lumenTopShapeType" value="0.0"/>
+  <PARAM id="lumenTopWarpAmount" value="0.3040000200271606"/>
+  <PARAM id="lumenTopWarpType" value="9.0"/>
+</PARAMETERS>
