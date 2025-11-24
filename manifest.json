@@ -9,12 +9,12 @@
       "status": "beta",
       "platforms": {
         "Win64": {
-          "plugin": "https://github.com/FractalSoundsPortal/FSBuilds/releases/download/v0.5.1/VST3_Lumen_V0.5.1.zip",
-          "presets": "https://github.com/FractalSoundsPortal/FSBuilds/releases/download/v0.5.1/Presets_Lumen_V0.5.1.zip"
+          "plugin": "https://github.com/FractalSoundsPortal/FSBuilds/releases/download/v0.5.1/VST3_Lumen_V.0.5.1.zip",
+          "presets": "https://github.com/FractalSoundsPortal/FSBuilds/releases/download/v0.5.1/Presets_Lumen_V.0.5.1.zip"
         },
         "MacOS": {
-          "plugin": "https://github.com/FractalSoundsPortal/FSBuilds/releases/download/v0.5.1/VST3_Lumen_V0.5.1.zip",
-          "presets": "https://github.com/FractalSoundsPortal/FSBuilds/releases/download/v0.5.1/Presets_Lumen_V0.5.1.zip"
+          "plugin": "https://github.com/FractalSoundsPortal/FSBuilds/releases/download/v0.5.1/VST3_Lumen_V.0.5.1.zip",
+          "presets": "https://github.com/FractalSoundsPortal/FSBuilds/releases/download/v0.5.1/Presets_Lumen_V.0.5.1.zip"
         }
       },
       "notes": "Initial beta release for Fractal Portal testing."
@@ -22,7 +22,7 @@
 
     "Glow": {
       "name": "Glow Signal Lifter",
-      "version": "V0.5.0",
+      "version": "0.5.0",
       "status": "beta",
       "platforms": {
         "Win64": {
@@ -39,13 +39,12 @@
 
     "Morphogen": {
       "name": "Morphogen Additive Synthesizer",
-      "version": "V0.5.0",
+      "version": "0.5.0",
       "status": "coming_2026",
       "platforms": {},
       "notes": "Major release planned for 2025."
     }
   }
 }
-
 
 
