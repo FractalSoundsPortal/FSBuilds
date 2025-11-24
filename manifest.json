@@ -1,6 +1,6 @@
 {
   "manifestVersion": "1.0",
-  "lastUpdated": "2025-11-16T00:00:00Z",
+  "lastUpdated": "2025-11-23T00:00:00Z",
 
   "products": {
     "Lumen": {
@@ -9,12 +9,12 @@
       "status": "beta",
       "platforms": {
         "Win64": {
-          "plugin": "https://github.com/FractalSoundsPortal/FSBuilds/releases/download/v0.5.1/VST3_Lumen_V.0.5.1.zip",
-          "presets": "https://github.com/FractalSoundsPortal/FSBuilds/releases/download/v0.5.1/Presets_Lumen_V.0.5.1.zip"
+          "plugin": "https://github.com/FractalSoundsPortal/FSBuilds/releases/download/v0.5.1/VST3_Lumen_V0.5.1.zip",
+          "presets": "https://github.com/FractalSoundsPortal/FSBuilds/releases/download/v0.5.1/Presets_Lumen_V0.5.1.zip"
         },
         "MacOS": {
-          "plugin": "https://github.com/FractalSoundsPortal/FSBuilds/releases/download/v0.5.1/VST3_Lumen_V.0.5.1.zip",
-          "presets": "https://github.com/FractalSoundsPortal/FSBuilds/releases/download/v0.5.1/Presets_Lumen_V.0.5.1.zip"
+          "plugin": "https://github.com/FractalSoundsPortal/FSBuilds/releases/download/v0.5.1/VST3_Lumen_V0.5.1.zip",
+          "presets": "https://github.com/FractalSoundsPortal/FSBuilds/releases/download/v0.5.1/Presets_Lumen_V0.5.1.zip"
         }
       },
       "notes": "Initial beta release for Fractal Portal testing."
@@ -26,15 +26,15 @@
       "status": "beta",
       "platforms": {
         "Win64": {
-          "plugin": "https://github.com/FractalSoundsPortal/FSBuilds/releases/download/v0.5.0/VST3_Glow_V.0.5.0.zip",
-          "presets": "https://github.com/FractalSoundsPortal/FSBuilds/releases/download/v0.5.0/Presets_Glow_V.0.5.0.zip"
+          "plugin": "https://github.com/FractalSoundsPortal/FSBuilds/releases/download/v0.5.0/VST3_Glow_V0.5.0.zip",
+          "presets": "https://github.com/FractalSoundsPortal/FSBuilds/releases/download/v0.5.0/Presets_Glow_V0.5.0.zip"
         },
         "MacOS": {
-          "plugin": "https://github.com/FractalSoundsPortal/FSBuilds/releases/download/v0.5.0/VST3_Glow_V.0.5.0.zip",
-          "presets": "https://github.com/FractalSoundsPortal/FSBuilds/releases/download/v0.5.0/Presets_Glow_V.0.5.0.zip"
+          "plugin": "https://github.com/FractalSoundsPortal/FSBuilds/releases/download/v0.5.0/VST3_Glow_V0.5.0.zip",
+          "presets": "https://github.com/FractalSoundsPortal/FSBuilds/releases/download/v0.5.0/Presets_Glow_V0.5.0.zip"
         }
       },
-      "notes": "Glow Beta Release — unified with Lumen 0.5.0 infrastructure."
+      "notes": "Glow Beta Release unified with Lumen 0.5.0 infrastructure."
     },
 
     "Morphogen": {
@@ -46,5 +46,6 @@
     }
   }
 }
+
 
 
