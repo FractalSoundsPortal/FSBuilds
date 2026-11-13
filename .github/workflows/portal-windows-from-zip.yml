@@ -1,0 +1,148 @@
+name: Build and verify Portal Windows from public ZIP
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Public release or prerelease containing the verified offline ZIP
+        required: true
+        default: Portal_V.1.0.4
+      zip_sha256:
+        description: Expected SHA-256 of the exact offline ZIP
+        required: true
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      ZIP_SHA256: ${{ inputs.zip_sha256 }}
+    steps:
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+      - name: Download verified offline ZIP and assemble installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:RELEASE_TAG -notmatch '^Portal_V\.\d+\.\d+\.\d+$' -or $env:ZIP_SHA256 -notmatch '^[a-fA-F0-9]{64}$') { throw 'Invalid package identity' }
+          $version = $env:RELEASE_TAG.Substring('Portal_V.'.Length)
+          gh release download $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --pattern '*-win-x64.zip' --dir candidate
+          if ($LASTEXITCODE -ne 0) { throw 'Package download failed' }
+          $package = @(Get-ChildItem candidate -Filter '*.zip')
+          if ($package.Count -ne 1 -or (Get-FileHash $package[0].FullName -Algorithm SHA256).Hash -ne $env:ZIP_SHA256) { throw 'Package checksum mismatch' }
+          Expand-Archive $package[0].FullName candidate/unpacked
+          $source = (Resolve-Path 'candidate/unpacked/Fractal Sounds Portal Setup').Path
+          npm install --prefix tools --no-audit --no-fund @electron/asar@3.4.1 electron-builder@26.15.3
+          if ($LASTEXITCODE -ne 0) { throw 'Packaging tooling installation failed' }
+          $env:PORTAL_PACKAGE_SOURCE = $source
+          $env:PORTAL_PACKAGE_VERSION = $version
+          @'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const asar = require('./tools/node_modules/@electron/asar');
+          const archive=path.join(process.env.PORTAL_PACKAGE_SOURCE,'resources/app.asar');
+          const manifest=JSON.parse(asar.extractFile(archive,'package.json'));
+          if(manifest.version!==process.env.PORTAL_PACKAGE_VERSION)throw Error('Packaged version mismatch');
+          fs.mkdirSync('packaging',{recursive:true});
+          fs.writeFileSync('packaging/icon.png',asar.extractFile(archive,'ui/assets/portal-icon.png'));
+          const config={name:manifest.name,version:manifest.version,productName:manifest.productName,description:manifest.description,author:manifest.author,main:manifest.main,build:{appId:'ca.fractalsounds.portal',directories:{output:'out'},win:{artifactName:'Fractal-Sounds-Portal-Setup-${version}-win-${arch}.${ext}',target:'portable',icon:'icon.png',signExecutable:false}}};
+          fs.writeFileSync('packaging/package.json',JSON.stringify(config,null,2));
+          // The ZIP-only launcher and readme are outside the original EXE payload.
+          fs.rmSync(path.join(process.env.PORTAL_PACKAGE_SOURCE,'Install Portal.cmd'));
+          fs.rmSync(path.join(process.env.PORTAL_PACKAGE_SOURCE,'READ ME.txt'));
+          '@ | Set-Content build-config.cjs -Encoding UTF8
+          node build-config.cjs
+          if ($LASTEXITCODE -ne 0) { throw 'Packaging configuration failed' }
+          node tools/node_modules/electron-builder/cli.js --projectDir packaging --win portable --x64 --prepackaged $source --publish never
+          if ($LASTEXITCODE -ne 0) { throw 'Windows installer assembly failed' }
+          $exe = @(Get-ChildItem packaging/out -Filter '*.exe')
+          if ($exe.Count -ne 1) { throw 'Expected exactly one installer' }
+          $hash = (Get-FileHash $exe[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "EXE_SHA256=$hash" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "$hash  $($exe[0].Name)" | Set-Content packaging/out/SHA256SUMS-windows-exe.txt
+          # Verify the new EXE contains the exact ZIP payload before testing it.
+          $sevenZip = Join-Path $env:ProgramFiles '7-Zip/7z.exe'
+          & $sevenZip x $exe[0].FullName '-ocandidate/bootstrap' -y | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'Setup extraction failed' }
+          $payload = @(Get-ChildItem candidate/bootstrap -Filter 'app-64.7z' -Recurse)
+          if ($payload.Count -ne 1) { throw 'Setup payload missing' }
+          & $sevenZip x $payload[0].FullName '-ocandidate/exe-payload' -y | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'Payload extraction failed' }
+          foreach ($file in Get-ChildItem $source -Recurse -File) {
+            $relative = $file.FullName.Substring($source.Length + 1)
+            $actual = Join-Path 'candidate/exe-payload' $relative
+            if (!(Test-Path $actual) -or (Get-FileHash $actual).Hash -ne (Get-FileHash $file.FullName).Hash) { throw "EXE payload mismatch: $relative" }
+          }
+      - name: Verify Microsoft prerequisite and packaged upgrade, launch and uninstall
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $source = (Resolve-Path 'candidate/unpacked/Fractal Sounds Portal Setup').Path
+          $version = $env:RELEASE_TAG.Substring('Portal_V.'.Length)
+          $exe = Join-Path $source 'Fractal Sounds Portal.exe'
+          if ((Get-Item $exe).VersionInfo.ProductVersion -notlike "$version*") { throw 'Executable version mismatch' }
+          $scripts = Join-Path $source 'resources/app.asar.unpacked/desktop'
+          powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $scripts 'windows-runtime.ps1') -Action VerifyInstaller -InstallerPath (Join-Path $scripts 'runtime/vc_redist.x64.exe')
+          if ($LASTEXITCODE -ne 0) { throw 'Native Authenticode verification failed' }
+          node tools/node_modules/@electron/asar/bin/asar.js extract (Join-Path $source 'resources/app.asar') extracted
+          if ($LASTEXITCODE -ne 0) { throw 'ASAR extraction failed' }
+          $manifest = Get-Content extracted/package.json -Raw | ConvertFrom-Json
+          if ($manifest.version -ne $version) { throw 'Packaged version mismatch' }
+          $target = Join-Path $env:LOCALAPPDATA 'Programs/Fractal Sounds Portal'
+          $env:PORTAL_TEST_SOURCE = $source
+          $env:PORTAL_TEST_TARGET = $target
+          $env:PORTAL_TEST_VERSION = $version
+          @'
+          import { installPortal } from './extracted/core/portal-setup.mjs';
+          await installPortal({source:process.env.PORTAL_TEST_SOURCE,target:process.env.PORTAL_TEST_TARGET,version:process.env.PORTAL_TEST_VERSION});
+          '@ | Set-Content package-install.mjs -Encoding UTF8
+          node package-install.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged installation transaction failed' }
+          powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $scripts 'portal-shortcuts.ps1') -Action Install -Target $target -Version $version
+          if ($LASTEXITCODE -ne 0) { throw 'Windows integration failed' }
+          if ((Get-FileHash (Join-Path $target 'Uninstall Portal.ps1')).Hash -ne (Get-FileHash (Join-Path $scripts 'portal-uninstall.ps1')).Hash) { throw 'Uninstaller not refreshed' }
+          node package-install.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged replacement transaction failed' }
+          powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $scripts 'portal-shortcuts.ps1') -Action Install -Target $target -Version $version
+          if ($LASTEXITCODE -ne 0) { throw 'Windows integration refresh failed' }
+          $installedExe = Join-Path $target 'Fractal Sounds Portal.exe'
+          $process = Start-Process -FilePath $installedExe -PassThru
+          Start-Sleep -Seconds 15
+          $process.Refresh()
+          if ($process.HasExited) { throw 'Installed application exited unexpectedly' }
+          Get-Process -Name 'Fractal Sounds Portal*' -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($target + '\') } | Stop-Process -Force
+          Start-Sleep -Seconds 3
+          $sentinel = Join-Path $env:LOCALAPPDATA 'Portal-release-preserved-data.txt'
+          'preserve' | Set-Content $sentinel
+          $tokens = $null; $errors = $null
+          $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $target 'Uninstall Portal.ps1'), [ref]$tokens, [ref]$errors)
+          if ($errors.Count) { throw 'Uninstaller parse error' }
+          foreach ($definition in $ast.FindAll({param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst]}, $false)) { . ([scriptblock]::Create($definition.Extent.Text)) }
+          $uninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\FractalSoundsPortal'
+          $protocolKey = 'HKCU:\Software\Classes\fractalsoundsportal'
+          $folders = @([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Programs'))
+          Remove-PortalInstallation -Target $target -ShortcutFolders $folders -UninstallKey $uninstallKey -ProtocolKey $protocolKey
+          if ((Test-Path $target) -or (Test-Path $uninstallKey) -or (Test-Path $protocolKey) -or !(Test-Path $sentinel)) { throw 'Uninstall postcondition failed' }
+          "Windows ${version}: native runtime signature, packaged install/replacement, launch and uninstall passed. EXE SHA256: $env:EXE_SHA256" | Out-File $env:GITHUB_STEP_SUMMARY -Encoding utf8
+      - name: Run the bundled UI checks on Windows
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          npm install --prefix tools --no-audit --no-fund electron@44.10.2
+          if ($LASTEXITCODE -ne 0) { throw 'Electron test runtime installation failed' }
+          node tools/node_modules/electron/cli.js extracted --smoke --smoke-online
+          if ($LASTEXITCODE -ne 0) { throw 'Bundled UI smoke failed' }
+          $report = Get-Content extracted/.test-output/smoke.json -Raw | ConvertFrom-Json
+          if ($report.ui.Count -ne 75 -or @($report.ui | Where-Object { !$_.ok }).Count -ne 0) { throw 'UI verification incomplete' }
+          "Bundled UI checks on Windows: 75/75 passed with Electron 44.10.2." | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: portal-windows-exe
+          path: |
+            packaging/out/*.exe
+            packaging/out/SHA256SUMS-windows-exe.txt
+          if-no-files-found: error
+          retention-days: 7
