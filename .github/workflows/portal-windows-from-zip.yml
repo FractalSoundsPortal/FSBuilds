@@ -47,7 +47,7 @@ jobs:
           const manifest=JSON.parse(asar.extractFile(archive,'package.json'));
           if(manifest.version!==process.env.PORTAL_PACKAGE_VERSION)throw Error('Packaged version mismatch');
           fs.mkdirSync('packaging',{recursive:true});
-          fs.writeFileSync('packaging/icon.png',asar.extractFile(archive,'ui/assets/portal-icon.png'));
+          fs.writeFileSync('packaging/icon.png',asar.extractFile(archive,path.join('ui','assets','portal-icon.png')));
           const config={name:manifest.name,version:manifest.version,productName:manifest.productName,description:manifest.description,author:manifest.author,main:manifest.main,build:{appId:'ca.fractalsounds.portal',electronVersion:'44.10.2',directories:{output:'out'},win:{artifactName:'Fractal-Sounds-Portal-Setup-${version}-win-${arch}.${ext}',target:'portable',icon:'icon.png',signExecutable:false}}};
           fs.writeFileSync('packaging/package.json',JSON.stringify(config,null,2));
           // The ZIP-only launcher and readme are outside the original EXE payload.
