@@ -3,11 +3,11 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: Draft release containing the installer ZIP
+        description: Draft release containing the installer EXE
         required: true
         default: Portal_V.1.0.3
-      zip_sha256:
-        description: Expected SHA-256 of the exact installer ZIP
+      exe_sha256:
+        description: Expected SHA-256 of the exact installer EXE
         required: true
 permissions:
   contents: read
@@ -18,7 +18,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_TAG: ${{ inputs.release_tag }}
-      ZIP_SHA256: ${{ inputs.zip_sha256 }}
+      EXE_SHA256: ${{ inputs.exe_sha256 }}
     steps:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
@@ -27,12 +27,18 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          if ($env:RELEASE_TAG -notmatch '^Portal_V\.\d+\.\d+\.\d+$' -or $env:ZIP_SHA256 -notmatch '^[a-fA-F0-9]{64}$') { throw 'Invalid package identity' }
-          gh release download $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --pattern '*-win-x64.zip' --dir candidate
+          if ($env:RELEASE_TAG -notmatch '^Portal_V\.\d+\.\d+\.\d+$' -or $env:EXE_SHA256 -notmatch '^[a-fA-F0-9]{64}$') { throw 'Invalid package identity' }
+          gh release download $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --pattern '*-win-x64.exe' --dir candidate
           if ($LASTEXITCODE -ne 0) { throw 'Package download failed' }
-          $zip = @(Get-ChildItem candidate -Filter '*.zip')
-          if ($zip.Count -ne 1 -or (Get-FileHash $zip[0].FullName -Algorithm SHA256).Hash -ne $env:ZIP_SHA256) { throw 'Package checksum mismatch' }
-          Expand-Archive $zip[0].FullName -DestinationPath candidate/unpacked
+          $package = @(Get-ChildItem candidate -Filter '*.exe')
+          if ($package.Count -ne 1 -or (Get-FileHash $package[0].FullName -Algorithm SHA256).Hash -ne $env:EXE_SHA256) { throw 'Package checksum mismatch' }
+          $sevenZip = Join-Path $env:ProgramFiles '7-Zip/7z.exe'
+          & $sevenZip x $package[0].FullName '-ocandidate/bootstrap' -y | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'Setup extraction failed' }
+          $payload = @(Get-ChildItem candidate/bootstrap -Filter 'app-64.7z' -Recurse)
+          if ($payload.Count -ne 1) { throw 'Setup payload missing' }
+          & $sevenZip x $payload[0].FullName '-ocandidate/unpacked/Fractal Sounds Portal Setup' -y | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'Payload extraction failed' }
           npm install --prefix tools --no-audit --no-fund @electron/asar@3.4.1
           if ($LASTEXITCODE -ne 0) { throw 'ASAR tooling installation failed' }
       - name: Verify Microsoft prerequisite and packaged upgrade, launch and uninstall
@@ -85,4 +91,4 @@ jobs:
           $folders = @([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Programs'))
           Remove-PortalInstallation -Target $target -ShortcutFolders $folders -UninstallKey $uninstallKey -ProtocolKey $protocolKey
           if ((Test-Path $target) -or (Test-Path $uninstallKey) -or (Test-Path $protocolKey) -or !(Test-Path $sentinel)) { throw 'Uninstall postcondition failed' }
-          "Windows ${version}: native runtime signature, packaged install/replacement, launch and uninstall passed. ZIP SHA256: $env:ZIP_SHA256" | Out-File $env:GITHUB_STEP_SUMMARY -Encoding utf8
+          "Windows ${version}: native runtime signature, packaged install/replacement, launch and uninstall passed. EXE SHA256: $env:EXE_SHA256" | Out-File $env:GITHUB_STEP_SUMMARY -Encoding utf8
