@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: Draft release containing the installer EXE
+        description: Public release or prerelease containing the installer EXE
         required: true
         default: Portal_V.1.0.3
       exe_sha256:
@@ -92,3 +92,14 @@ jobs:
           Remove-PortalInstallation -Target $target -ShortcutFolders $folders -UninstallKey $uninstallKey -ProtocolKey $protocolKey
           if ((Test-Path $target) -or (Test-Path $uninstallKey) -or (Test-Path $protocolKey) -or !(Test-Path $sentinel)) { throw 'Uninstall postcondition failed' }
           "Windows ${version}: native runtime signature, packaged install/replacement, launch and uninstall passed. EXE SHA256: $env:EXE_SHA256" | Out-File $env:GITHUB_STEP_SUMMARY -Encoding utf8
+      - name: Run the bundled UI checks on Windows
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          npm install --prefix tools --no-audit --no-fund electron@44.10.2
+          if ($LASTEXITCODE -ne 0) { throw 'Electron test runtime installation failed' }
+          node tools/node_modules/electron/cli.js extracted --smoke --smoke-online
+          if ($LASTEXITCODE -ne 0) { throw 'Bundled UI smoke failed' }
+          $report = Get-Content extracted/.test-output/smoke.json -Raw | ConvertFrom-Json
+          if ($report.ui.Count -ne 75 -or @($report.ui | Where-Object { !$_.ok }).Count -ne 0) { throw 'UI verification incomplete' }
+          "Bundled UI checks on Windows: 75/75 passed with Electron 44.10.2." | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
