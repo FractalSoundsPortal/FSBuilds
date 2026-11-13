@@ -1,0 +1,88 @@
+name: Verify Portal Windows package
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Draft release containing the installer ZIP
+        required: true
+        default: Portal_V.1.0.3
+      zip_sha256:
+        description: Expected SHA-256 of the exact installer ZIP
+        required: true
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      ZIP_SHA256: ${{ inputs.zip_sha256 }}
+    steps:
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+      - name: Download and verify the distributable
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:RELEASE_TAG -notmatch '^Portal_V\.\d+\.\d+\.\d+$' -or $env:ZIP_SHA256 -notmatch '^[a-fA-F0-9]{64}$') { throw 'Invalid package identity' }
+          gh release download $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --pattern '*-win-x64.zip' --dir candidate
+          if ($LASTEXITCODE -ne 0) { throw 'Package download failed' }
+          $zip = @(Get-ChildItem candidate -Filter '*.zip')
+          if ($zip.Count -ne 1 -or (Get-FileHash $zip[0].FullName -Algorithm SHA256).Hash -ne $env:ZIP_SHA256) { throw 'Package checksum mismatch' }
+          Expand-Archive $zip[0].FullName -DestinationPath candidate/unpacked
+          npm install --prefix tools --no-audit --no-fund @electron/asar@3.4.1
+          if ($LASTEXITCODE -ne 0) { throw 'ASAR tooling installation failed' }
+      - name: Verify Microsoft prerequisite and packaged upgrade, launch and uninstall
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $source = (Resolve-Path 'candidate/unpacked/Fractal Sounds Portal Setup').Path
+          $version = $env:RELEASE_TAG.Substring('Portal_V.'.Length)
+          $exe = Join-Path $source 'Fractal Sounds Portal.exe'
+          if ((Get-Item $exe).VersionInfo.ProductVersion -notlike "$version*") { throw 'Executable version mismatch' }
+          $scripts = Join-Path $source 'resources/app.asar.unpacked/desktop'
+          powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $scripts 'windows-runtime.ps1') -Action VerifyInstaller -InstallerPath (Join-Path $scripts 'runtime/vc_redist.x64.exe')
+          if ($LASTEXITCODE -ne 0) { throw 'Native Authenticode verification failed' }
+          node tools/node_modules/@electron/asar/bin/asar.js extract (Join-Path $source 'resources/app.asar') extracted
+          if ($LASTEXITCODE -ne 0) { throw 'ASAR extraction failed' }
+          $manifest = Get-Content extracted/package.json -Raw | ConvertFrom-Json
+          if ($manifest.version -ne $version) { throw 'Packaged version mismatch' }
+          $target = Join-Path $env:LOCALAPPDATA 'Programs/Fractal Sounds Portal'
+          $env:PORTAL_TEST_SOURCE = $source
+          $env:PORTAL_TEST_TARGET = $target
+          $env:PORTAL_TEST_VERSION = $version
+          @'
+          import { installPortal } from './extracted/core/portal-setup.mjs';
+          await installPortal({source:process.env.PORTAL_TEST_SOURCE,target:process.env.PORTAL_TEST_TARGET,version:process.env.PORTAL_TEST_VERSION});
+          '@ | Set-Content package-install.mjs -Encoding UTF8
+          node package-install.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged installation transaction failed' }
+          powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $scripts 'portal-shortcuts.ps1') -Action Install -Target $target -Version $version
+          if ($LASTEXITCODE -ne 0) { throw 'Windows integration failed' }
+          if ((Get-FileHash (Join-Path $target 'Uninstall Portal.ps1')).Hash -ne (Get-FileHash (Join-Path $scripts 'portal-uninstall.ps1')).Hash) { throw 'Uninstaller not refreshed' }
+          node package-install.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged replacement transaction failed' }
+          powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $scripts 'portal-shortcuts.ps1') -Action Install -Target $target -Version $version
+          if ($LASTEXITCODE -ne 0) { throw 'Windows integration refresh failed' }
+          $installedExe = Join-Path $target 'Fractal Sounds Portal.exe'
+          $process = Start-Process -FilePath $installedExe -PassThru
+          Start-Sleep -Seconds 15
+          $process.Refresh()
+          if ($process.HasExited) { throw 'Installed application exited unexpectedly' }
+          Get-Process -Name 'Fractal Sounds Portal*' -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($target + '\') } | Stop-Process -Force
+          Start-Sleep -Seconds 3
+          $sentinel = Join-Path $env:LOCALAPPDATA 'Portal-release-preserved-data.txt'
+          'preserve' | Set-Content $sentinel
+          $tokens = $null; $errors = $null
+          $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $target 'Uninstall Portal.ps1'), [ref]$tokens, [ref]$errors)
+          if ($errors.Count) { throw 'Uninstaller parse error' }
+          foreach ($definition in $ast.FindAll({param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst]}, $false)) { . ([scriptblock]::Create($definition.Extent.Text)) }
+          $uninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\FractalSoundsPortal'
+          $protocolKey = 'HKCU:\Software\Classes\fractalsoundsportal'
+          $folders = @([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Programs'))
+          Remove-PortalInstallation -Target $target -ShortcutFolders $folders -UninstallKey $uninstallKey -ProtocolKey $protocolKey
+          if ((Test-Path $target) -or (Test-Path $uninstallKey) -or (Test-Path $protocolKey) -or !(Test-Path $sentinel)) { throw 'Uninstall postcondition failed' }
+          "Windows ${version}: native runtime signature, packaged install/replacement, launch and uninstall passed. ZIP SHA256: $env:ZIP_SHA256" | Out-File $env:GITHUB_STEP_SUMMARY -Encoding utf8
